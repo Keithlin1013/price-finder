@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Price Finder",
+  "version": "0.4.0",
+  "description": "Reads Walmart, Target, Amazon and Costco search results in your own Chrome for the local Price Finder page.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.walmart.com/*",
+    "https://www.target.com/*",
+    "https://www.amazon.com/*",
+    "https://www.costco.com/*",
+    "http://localhost:3001/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3001/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+# 比价 Price Finder
+
+输入一个商品名或条码（UPC），同时查 **Walmart、Target、Amazon、Costco** 四家的价格，找出同款商品，按**单价**（每盎司、每磅、每个、每次洗涤）从便宜到贵排好。容量不同的包装也能公平比较。一次比价大约 15 秒。
+
+Compare one product's price across Walmart, Target, Amazon and Costco, matched by TypeSafe and
+ranked per unit (per fl oz, oz, lb, count or load). An English summary is at the end.
+
+---
+
+## 最重要的一点：它用的是**你自己的 Chrome**
+
+Price Finder **不会**另开一个"机器人浏览器"，不用爬虫服务，不换 IP，也不用任何随机、临时或自动化的浏览器去抓网页。
+
+它的工作方式是：
+
+- 你在**平时用的那个 Chrome** 里装一个小扩展（`extension/` 文件夹）。
+- 比价时，扩展在你**当前的 Chrome 窗口**里，紧挨着比价页面开几个**后台标签页**，分别打开四家商店的**搜索结果页**。
+- 这些标签页用的是**你本人的登录状态、会员店、送货地址和浏览记录**，跟你自己手动打开这些网页完全一样。
+- 扩展读完页面就把标签页关掉，把网页内容交给你电脑上运行的本地服务器处理。
+
+### 为什么一定要用自己的 Chrome
+
+开发过程中试过其他做法，都不行：
+
+| 做法 | 结果 |
+|---|---|
+| 用 Playwright 这类自动化工具另开一个 Chrome | Target、Walmart 很快弹出"Press & hold"机器人验证。macOS 还会拦截程序去控制 Chrome，导致窗口被直接关掉 |
+| 用一个全新、空白的独立 Chrome 配置 | 没有登录、没有浏览记录，风险分高，连开两个页面就被拦 |
+| 付费搜索接口（SerpApi） | Walmart 和 Amazon 可以查，但**没有 Target 的接口**，Costco 也不稳定 |
+| **你自己已登录的 Chrome + 扩展（现在的做法）** | 稳定。和你自己逛网站的样子一样，而且价格按你的会员店、门店和地址显示 |
+
+### 它**不会**做的事
+
+- 不会绕过、破解或自动完成任何验证码或"Press & hold"验证。遇到验证时它会停下来等你亲手按。
+- 不会轮换 IP、伪装浏览器指纹，也不会用代理。
+- 不会进入商品详情页批量抓取；每家店每次比价只打开 **1 个搜索页**。
+- 不会下单、不会加入购物车、不会改动你的任何账号设置。
+
+---
+
+## 运作流程
+
+```
+ 你在 localhost:3001 输入商品，点「比价」
+        │
+        ▼
+ ① 页面先问本地服务器：这个商品 24 小时内查过吗？
+        │   查过的店直接用缓存，不打开网页
+        ▼
+ ② 页面把还没查的店的「搜索网址」和「访问节奏」发给扩展
+        │
+        ▼
+ ③ 扩展在你的 Chrome 里为每家店开一个后台标签页（四家同时进行）
+        │   · 每个网站两次访问至少间隔 20 秒，每小时最多 12 次
+        │   · 页面加载后稍等并向下滚动，让商品卡片显示出来
+        │   · 如果出现验证：把那个标签页切到前面，等你按住，最多等 5 分钟
+        ▼
+ ④ 扩展把整个网页内容（HTML）交回页面，然后关闭标签页
+        │
+        ▼
+ ⑤ 本地服务器解析网页，取出每个商品的名称、价格、链接（lib/parse.ts）
+        │   Walmart 优先读网页内嵌的商品数据；其他三家读商品卡片
+        ▼
+ ⑥ TypeSafe 判断每个结果是不是你要的同款（lib/match.ts）
+        │
+        ▼
+ ⑦ 按单价排序显示：最便宜的一张做成大号标牌，其余依次排列；
+    不同款的结果盖上「不同品牌 / 不同系列 / 不同香型 / 不同形态」印章
+```
+
+### 各部分的分工
+
+| 部分 | 负责什么 | 位置 |
+|---|---|---|
+| **Chrome 扩展** | 只负责在你的 Chrome 里打开页面、检测验证、把网页内容交回。搜索网址和访问节奏都由页面传过来 | `extension/` |
+| **比价页面** | 输入框、四家店的进度卡片（点一下就只看这家）、结果标牌 | `app/page.tsx`、`app/globals.css` |
+| **网页解析** | 从四家的搜索页里取出名称、价格、链接 | `lib/parse.ts` |
+| **同款判断** | 调用 TypeSafe，逐项检查品牌、系列、香型、形态 | `lib/match.ts` |
+| **单价计算** | 从标题读出容量、件数，算出每单位价格 | `lib/units.ts`、`lib/stores.ts` |
+| **缓存** | 搜索结果、每家最近一次的网页、TypeSafe 的判断 | `.cache/`（只在本地，不上传） |
+
+因为解析、网址、节奏都在服务器和页面这边，**以后修改这些不需要重新加载扩展**。只有改 `extension/` 里的代码时才需要。
+
+### 同款怎么判断
+
+对每个结果，TypeSafe 回答 5 个是非题：
+
+1. 标题里写了品牌吗？（没写品牌就跳过第 2 项，交给系列判断）
+2. 和你要的是同一品牌吗？
+3. 同一系列吗？（每个修饰词都算：Platinum 和 Platinum Plus 是不同系列）
+4. 香型、口味兼容吗？（标题没写香型不算不同）
+5. 形态一样吗？（液体、粉末、凝胶、洗碗块等）
+
+**全部通过才算同款。容量和件数不检查**，因为结果按单价排。判断结果按"查询 + 商品标题"存在 `.cache/verdicts/`，同一商品每次答案一样；判断规则一改，旧答案自动作废、重新判断。
+
+### 单价怎么算
+
+从标题里读出 `fl oz`、`oz`、`lb`、`L`、`ml`、`gal`、`loads`、`count / ct` 等容量，再乘以件数（`Pack of 6`、`2-pack` 等），算出每单位价格。排序优先用你输入里写的单位，其中体积、重量优先。
+
+---
+
+## 安装与使用
+
+### 需要
+
+- macOS 或 Windows，装有 **Google Chrome**
+- Node.js 20 以上
+- 一个 TypeSafe API key（在 https://console.typesafe.ai/ 获取）
+
+### 1. 安装项目
+
+```bash
+git clone https://github.com/Keithlin1013/price-finder.git
+cd price-finder
+npm install
+```
+
+### 2. 放 API key（不要上传）
+
+在项目根目录建 `.env.local`，写一行：
+
+```
+TYPESAFE_API_KEY=你的key
+```
+
+`.env.local` 已在 `.gitignore` 里，**不会被提交到 GitHub**。
+
+### 3. 把扩展装进你自己的 Chrome
+
+1. 如果项目放在**会被 iCloud 同步的文件夹**（比如"桌面"或"文稿"），先把扩展复制到不同步的位置。iCloud 同步暂停时，Chrome 可能读到旧文件：
+   ```bash
+   mkdir -p ~/price-finder-extension && cp extension/* ~/price-finder-extension/
+   ```
+2. 在 Chrome 地址栏打开 `chrome://extensions`，打开右上角的 **开发者模式（Developer mode）**。
+3. 点 **加载已解压的扩展程序（Load unpacked）**，选择 `~/price-finder-extension`（或者项目里的 `extension` 文件夹）。
+4. 确认列表里出现 **Price Finder**，版本 **0.4.0** 以上。
+
+### 4. 在这个 Chrome 里登录四家商店
+
+在装了扩展的 Chrome 里分别登录 Walmart、Target、Amazon、Costco，并选好你的门店、会员店或送货地址。**价格会按这些设置显示**。
+
+### 5. 启动并比价
+
+```bash
+npm run dev -- --port 3001
+```
+
+用**同一个 Chrome** 打开 http://localhost:3001，输入商品名或条码，点「比价」。
+
+- 旁边会出现几个后台标签页，读完自动关闭。
+- 出结果后，点上面任意一家店的卡片，就只看这家的报价；再点一次或点「显示全部」恢复。
+- 某家弹出验证时，那个标签页会切到前面，按住验证即可继续。
+
+---
+
+## 常见问题
+
+| 现象 | 原因和处理 |
+|---|---|
+| 「比价」按钮是灰的，提示没检测到扩展 | 扩展没装或没启用；装好后**刷新**比价页面 |
+| 提示扩展版本太旧 | 到 `chrome://extensions` 点 Price Finder 的 ↻；如果项目在 iCloud 同步的文件夹里，先重新复制到 `~/price-finder-extension` |
+| 一直显示"准备中"，20 秒后提示扩展没回应 | 同上，重新加载扩展再刷新页面 |
+| 在**全屏模式**下点比价，整个 Chrome 关掉了 | 早期版本会新建窗口，全屏下可能关闭整个 Chrome。0.2.1 起改用后台标签页，如果仍出现请先退出全屏 |
+| 某家一直弹验证 | 短时间内访问太多。等一段时间再用；不要频繁连续比价 |
+| 某家显示 0 个结果 | 网站可能改版。每家最近一次的网页保存在 `.cache/pages/`，可以对照修改 `lib/parse.ts` |
+
+---
+
+## 限制
+
+- 价格来自各店**搜索结果页**，结账价可能因运费、会员、门店、优惠不同。
+- Target 同一商品有多个规格时，卡片上是价格区间，需要点开确认。
+- 用条码搜索时：Walmart 需要 14 位 GTIN（程序会自动补 0）；Amazon 的主商品常挂在别的编号下，用商品名搜可能找到更多。
+- 这是给个人使用的低频工具。各商店的服务条款一般不允许自动抓取，请不要改成高频、批量或给他人提供的服务。
+
+## 商标说明
+
+Walmart、Target、Amazon、Costco 的名称和 logo 属于各自的公司，这里只用来标识是哪家商店。Walmart、Target、Amazon 的图标数据来自 [Simple Icons](https://simpleicons.org/)（CC0）；`public/costco-logo.png` 是 costco.com 上使用的 logo 图片。
+
+---
+
+## English summary
+
+Price Finder compares one product across Walmart, Target, Amazon and Costco and ranks matching
+offers by unit price.
+
+**It runs in your own Chrome, not a random or automated browser.** A small extension
+(`extension/`) opens each store's search page as a background tab in the Chrome you already use,
+with your own sign-ins, warehouse, store and delivery address, then returns the page HTML to the
+local Next.js server and closes the tab. Nothing launches a separate automated browser, rotates
+IPs, or works around bot checks: if a store asks for a "press & hold", the tab comes forward and
+the lookup waits up to five minutes for you. Automated and fresh-profile browsers were tried
+first and were blocked; the signed-in everyday browser is what makes it work.
+
+Pacing is per site: one search page per store per comparison, at least 20 s between two loads of
+the same site and at most 12 an hour; results are cached for 24 h. The server parses the pages
+(`lib/parse.ts`), TypeSafe judges each result with five narrow checks (names a brand, same brand,
+same product line, compatible variant, same form; size is ignored because ranking is per unit),
+and verdicts are cached per query and title so answers are stable. Setup: `npm install`, put
+`TYPESAFE_API_KEY` in `.env.local` (gitignored), load the unpacked extension in Chrome, sign in to
+the four stores in that Chrome, run `npm run dev -- --port 3001`, open http://localhost:3001 in
+the same Chrome.
