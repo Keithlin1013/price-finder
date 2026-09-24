@@ -408,6 +408,47 @@ button {
   justify-content: space-between;
   gap: 12px;
 }
+.rack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Two-way switch between comparing the same product and similar products. */
+.scope {
+  display: inline-flex;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.scope-option {
+  background: var(--stock);
+  border: 0;
+  padding: 6px 12px;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.15;
+  text-align: center;
+  transition: background-color 150ms var(--ease-out);
+}
+.scope-option + .scope-option {
+  border-left: 2px solid var(--ink);
+}
+.scope-option[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--stock);
+}
+.scope-option[aria-pressed="true"] .en {
+  color: var(--stock);
+  opacity: 0.7;
+}
+.scope-option:disabled {
+  cursor: wait;
+}
+.scope-option .en {
+  margin-top: 1px;
+}
+
 .show-all {
   background: var(--stock);
   border: 2px solid var(--ink);
@@ -788,7 +829,8 @@ button {
   }
   .compare,
   .upright-button,
-  .show-all {
+  .show-all,
+  .scope-option {
     transition: none;
   }
 }

@@ -76,12 +76,20 @@ function target($: $): Raw[] {
       const text = clean(card.text());
       // The link also wraps promo badges ("$5 Target GiftCard with…", "Rarely returned");
       // the product name is the longest line that is not one of those.
-      const title =
+      const name =
         clean(card.find('[data-test="product-title"]').first().text()) ||
         lines($, $(a))
           .filter((l) => !BADGE.test(l))
           .sort((x, y) => y.length - x.length)[0] ||
         "";
+      // Target sets the brand as its own piece in front of the name ("CeraVe™" + "Hydrating Makeup
+      // Cleansing Balm…"); without it the name reads as brandless and the product line cannot match.
+      const quill = card
+        .find('[data-test="text-quill"]')
+        .filter((_, q) => name.length > 0 && clean($(q).text()).includes(name))
+        .first();
+      const pieces = quill.children('[data-test^="text-quill-insert"]').map((_, n) => clean($(n).text())).get();
+      const title = clean((pieces.length > 1 && pieces.includes(name) ? pieces.join(" ") : name).replace(/[™®]/g, ""));
       return {
         title,
         priceText: /\$[\d,.]+(?:\s*-\s*\$[\d,.]+)?/.exec(text)?.[0] ?? "",
@@ -102,7 +110,11 @@ function amazon($: $): Raw[] {
       const link = card.find("h2").closest("a").first().length ? card.find("h2").closest("a").first() : card.find("a.a-link-normal").first();
       return {
         // h2 can hold only the brand; the full name sits in the title recipe block.
-        title: (clean(card.find('[data-cy="title-recipe"]').first().text()) || clean(card.find("h2").text())).replace(AMAZON_AD, ""),
+        // Brand and name sit in separate nodes; joining their text directly gave "SoftsoapAquarium".
+        title: (lines($, card.find('[data-cy="title-recipe"]').first()).join(" ") || clean(card.find("h2").text()))
+          .replace(AMAZON_AD, "")
+          .replace(/\s+/g, " ")
+          .trim(),
         priceText: clean(card.find(".a-price .a-offscreen").first().text()),
         url: abs("https://www.amazon.com", link.attr("href")).split("?")[0].split("/ref=")[0],
         sponsored: /\bSponsored\b/.test(card.text()),
