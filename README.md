@@ -1,113 +1,112 @@
-# 比价 Price Finder
+# Price Finder 比价
 
-输入一个商品名或条码（UPC），同时查 **Walmart、Target、Amazon、Costco** 四家的价格，找出同款商品，按**单价**（每盎司、每磅、每个、每次洗涤）从便宜到贵排好。容量不同的包装也能公平比较。一次比价大约 15 秒。
+**English** | [简体中文](README.zh-CN.md)
 
-Compare one product's price across Walmart, Target, Amazon and Costco, matched by TypeSafe and
-ranked per unit (per fl oz, oz, lb, count or load). An English summary is at the end.
+Enter a product name or barcode (UPC) and Price Finder checks **Walmart, Target, Amazon and Costco** at once, finds the same product at each store, and ranks the offers by **unit price** (per fl oz, oz, lb, count or load), so different package sizes compare fairly. A comparison takes about 15 seconds.
 
 ---
 
-## 最重要的一点：它用的是**你自己的 Chrome**
+## The key point: it runs in **your own Chrome**
 
-Price Finder **不会**另开一个"机器人浏览器"，不用爬虫服务，不换 IP，也不用任何随机、临时或自动化的浏览器去抓网页。
+Price Finder does **not** launch a separate "bot browser". It uses no scraping service, no rotating IPs, and no random, temporary or automated browser.
 
-它的工作方式是：
+How it works:
 
-- 你在**平时用的那个 Chrome** 里装一个小扩展（`extension/` 文件夹）。
-- 比价时，扩展在你**当前的 Chrome 窗口**里，紧挨着比价页面开几个**后台标签页**，分别打开四家商店的**搜索结果页**。
-- 这些标签页用的是**你本人的登录状态、会员店、送货地址和浏览记录**，跟你自己手动打开这些网页完全一样。
-- 扩展读完页面就把标签页关掉，把网页内容交给你电脑上运行的本地服务器处理。
+- You install a small extension (the `extension/` folder) in **the Chrome you already use every day**.
+- When you compare, the extension opens **background tabs** in **your current Chrome window**, right next to the Price Finder page, one for each store's **search results page**.
+- Those tabs carry **your own sign-ins, membership warehouse, store, delivery address and browsing history**, exactly as if you had opened the pages yourself.
+- Once a page is read, the extension closes the tab and hands the page to the server running locally on your computer.
 
-### 为什么一定要用自己的 Chrome
+### Why it has to be your own Chrome
 
-开发过程中试过其他做法，都不行：
+Other approaches were tried during development and did not work:
 
-| 做法 | 结果 |
+| Approach | Result |
 |---|---|
-| 用 Playwright 这类自动化工具另开一个 Chrome | Target、Walmart 很快弹出"Press & hold"机器人验证。macOS 还会拦截程序去控制 Chrome，导致窗口被直接关掉 |
-| 用一个全新、空白的独立 Chrome 配置 | 没有登录、没有浏览记录，风险分高，连开两个页面就被拦 |
-| 付费搜索接口（SerpApi） | Walmart 和 Amazon 可以查，但**没有 Target 的接口**，Costco 也不稳定 |
-| **你自己已登录的 Chrome + 扩展（现在的做法）** | 稳定。和你自己逛网站的样子一样，而且价格按你的会员店、门店和地址显示 |
+| Launching a separate Chrome with an automation tool such as Playwright | Target and Walmart quickly showed a "Press & hold" bot check. macOS also blocked the program from controlling Chrome, and the window was closed outright |
+| A brand-new, empty standalone Chrome profile | No sign-ins and no history meant a high risk score; opening a second page got blocked |
+| A paid search API (SerpApi) | Worked for Walmart and Amazon, but has **no Target API**, and Costco was unreliable |
+| **Your own signed-in Chrome + the extension (current approach)** | Reliable. It looks the same as you browsing the sites yourself, and prices reflect your warehouse, store and address |
 
-### 它**不会**做的事
+### What it does **not** do
 
-- 不会绕过、破解或自动完成任何验证码或"Press & hold"验证。遇到验证时它会停下来等你亲手按。
-- 不会轮换 IP、伪装浏览器指纹，也不会用代理。
-- 不会进入商品详情页批量抓取；每家店每次比价只打开 **1 个搜索页**。
-- 不会下单、不会加入购物车、不会改动你的任何账号设置。
+- It never bypasses, cracks or auto-completes a CAPTCHA or "Press & hold" check. When a check appears it stops and waits for you to do it yourself.
+- It never rotates IPs, spoofs a browser fingerprint or uses a proxy.
+- It never crawls product detail pages in bulk; each store gets **1 search page** per comparison.
+- It never places orders, adds to cart, or changes any of your account settings.
 
 ---
 
-## 运作流程
+## How it works
 
 ```
- 你在 localhost:3001 输入商品，点「比价」
+ You type a product at localhost:3001 and press Compare
         │
         ▼
- ① 页面先问本地服务器：这个商品 24 小时内查过吗？
-        │   查过的店直接用缓存，不打开网页
+ ① The page asks the local server: was this product looked up in the last 24 hours?
+        │   Stores already looked up come from the cache; no page is opened
         ▼
- ② 页面把还没查的店的「搜索网址」和「访问节奏」发给扩展
+ ② The page sends the extension the search URL and pacing for each remaining store
         │
         ▼
- ③ 扩展在你的 Chrome 里为每家店开一个后台标签页（四家同时进行）
-        │   · 每个网站两次访问至少间隔 20 秒，每小时最多 12 次
-        │   · 页面加载后稍等并向下滚动，让商品卡片显示出来
-        │   · 如果出现验证：把那个标签页切到前面，等你按住，最多等 5 分钟
+ ③ The extension opens one background tab per store in your Chrome (all four at once)
+        │   · At least 20 s between two loads of the same site, at most 12 loads an hour
+        │   · After the page loads it waits briefly and scrolls so the product cards render
+        │   · If a check appears: that tab comes to the front and waits for you to press & hold, up to 5 minutes
         ▼
- ④ 扩展把整个网页内容（HTML）交回页面，然后关闭标签页
+ ④ The extension returns the whole page (HTML) to the Price Finder page and closes the tab
         │
         ▼
- ⑤ 本地服务器解析网页，取出每个商品的名称、价格、链接（lib/parse.ts）
-        │   Walmart 优先读网页内嵌的商品数据；其他三家读商品卡片
+ ⑤ The local server parses the page for each product's name, price and link (lib/parse.ts)
+        │   Walmart: the product data embedded in the page first; the other three: the product cards
         ▼
- ⑥ TypeSafe 判断每个结果是不是你要的同款（lib/match.ts）
+ ⑥ TypeSafe decides whether each result is the same product you asked for (lib/match.ts)
         │
         ▼
- ⑦ 按单价排序显示：最便宜的一张做成大号标牌，其余依次排列；
-    不同款的结果盖上「不同品牌 / 不同系列 / 不同香型 / 不同形态」印章
+ ⑦ Results are shown ranked by unit price: the cheapest as a large sign, the rest in order;
+    results that are not the same product get a stamp: other brand / other line / other variant / other form
 ```
 
-### 各部分的分工
+### Who does what
 
-| 部分 | 负责什么 | 位置 |
+| Part | Responsibility | Location |
 |---|---|---|
-| **Chrome 扩展** | 只负责在你的 Chrome 里打开页面、检测验证、把网页内容交回。搜索网址和访问节奏都由页面传过来 | `extension/` |
-| **比价页面** | 输入框、四家店的进度卡片（点一下就只看这家）、结果标牌 | `app/page.tsx`、`app/globals.css` |
-| **网页解析** | 从四家的搜索页里取出名称、价格、链接 | `lib/parse.ts` |
-| **同款判断** | 调用 TypeSafe，逐项检查品牌、系列、香型、形态 | `lib/match.ts` |
-| **单价计算** | 从标题读出容量、件数，算出每单位价格 | `lib/units.ts`、`lib/stores.ts` |
-| **缓存** | 搜索结果、每家最近一次的网页、TypeSafe 的判断 | `.cache/`（只在本地，不上传） |
+| **Chrome extension** | Only opens pages in your Chrome, detects bot checks, and returns the page HTML. Search URLs and pacing come from the page | `extension/` |
+| **Compare page** | Search field, the four store progress cards (tap one to show only that store), result signs | `app/page.tsx`, `app/globals.css` |
+| **Page parsing** | Pulls name, price and link from each store's search page | `lib/parse.ts` |
+| **Same-product matching** | Calls TypeSafe to check brand, product line, variant and form | `lib/match.ts` |
+| **Unit prices** | Reads size and pack count from the title and computes the price per unit | `lib/units.ts`, `lib/stores.ts` |
+| **Caches** | Search results, the last page per store, TypeSafe verdicts | `.cache/` (local only, never committed) |
 
-因为解析、网址、节奏都在服务器和页面这边，**以后修改这些不需要重新加载扩展**。只有改 `extension/` 里的代码时才需要。
+Parsing, URLs and pacing all live in the server and the page, so **changing them does not require reloading the extension**. Only changes to the code in `extension/` do.
 
-### 同款怎么判断
+### How a match is decided
 
-对每个结果，TypeSafe 回答 5 个是非题：
+For every result, TypeSafe answers five yes/no questions:
 
-1. 标题里写了品牌吗？（没写品牌就跳过第 2 项，交给系列判断）
-2. 和你要的是同一品牌吗？
-3. 同一系列吗？（每个修饰词都算：Platinum 和 Platinum Plus 是不同系列）
-4. 香型、口味兼容吗？（标题没写香型不算不同）
-5. 形态一样吗？（液体、粉末、凝胶、洗碗块等）
+1. Does the title name a brand? (If not, question 2 is skipped and the product line decides.)
+2. Is it the same brand as the one you want?
+3. Is it the same product line? (Every qualifier word counts: Platinum and Platinum Plus are different lines.)
+4. Is the scent or flavor compatible? (A title that states no scent counts as compatible.)
+5. Is it the same physical form? (Liquid, powder, gel, pods, and so on.)
 
-**全部通过才算同款。容量和件数不检查**，因为结果按单价排。判断结果按"查询 + 商品标题"存在 `.cache/verdicts/`，同一商品每次答案一样；判断规则一改，旧答案自动作废、重新判断。
+**All five must pass. Size and pack count are not checked**, because results are ranked per unit. Verdicts are stored per query and product title in `.cache/verdicts/`, so the same listing gets the same answer every time; when the rules change, old verdicts are discarded and results are judged again.
 
-### 单价怎么算
+### How unit prices are computed
 
-从标题里读出 `fl oz`、`oz`、`lb`、`L`、`ml`、`gal`、`loads`、`count / ct` 等容量，再乘以件数（`Pack of 6`、`2-pack` 等），算出每单位价格。排序优先用你输入里写的单位，其中体积、重量优先。
+The size is read from the title (`fl oz`, `oz`, `lb`, `L`, `ml`, `gal`, `loads`, `count / ct`, and so on) and multiplied by the pack count (`Pack of 6`, `2-pack`, and so on) to get the price per unit. Ranking prefers a unit you typed in your query, with volume and weight first.
 
 ---
 
-## 安装与使用
+## Setup and use
 
-### 需要
+### Requirements
 
-- macOS 或 Windows，装有 **Google Chrome**
-- Node.js 20 以上
-- 一个 TypeSafe API key（在 https://console.typesafe.ai/ 获取）
+- macOS or Windows with **Google Chrome**
+- Node.js 20 or later
+- A TypeSafe API key (get one at https://console.typesafe.ai/)
 
-### 1. 安装项目
+### 1. Install the project
 
 ```bash
 git clone https://github.com/Keithlin1013/price-finder.git
@@ -115,88 +114,64 @@ cd price-finder
 npm install
 ```
 
-### 2. 放 API key（不要上传）
+### 2. Add your API key (never commit it)
 
-在项目根目录建 `.env.local`，写一行：
+Create `.env.local` in the project root with one line:
 
 ```
-TYPESAFE_API_KEY=你的key
+TYPESAFE_API_KEY=your-key
 ```
 
-`.env.local` 已在 `.gitignore` 里，**不会被提交到 GitHub**。
+`.env.local` is listed in `.gitignore`, so it is **never committed to GitHub**.
 
-### 3. 把扩展装进你自己的 Chrome
+### 3. Install the extension in your own Chrome
 
-1. 如果项目放在**会被 iCloud 同步的文件夹**（比如"桌面"或"文稿"），先把扩展复制到不同步的位置。iCloud 同步暂停时，Chrome 可能读到旧文件：
+1. If the project lives in a **folder that iCloud syncs** (such as Desktop or Documents), copy the extension somewhere that is not synced first. While iCloud sync is paused, Chrome can read stale files:
    ```bash
    mkdir -p ~/price-finder-extension && cp extension/* ~/price-finder-extension/
    ```
-2. 在 Chrome 地址栏打开 `chrome://extensions`，打开右上角的 **开发者模式（Developer mode）**。
-3. 点 **加载已解压的扩展程序（Load unpacked）**，选择 `~/price-finder-extension`（或者项目里的 `extension` 文件夹）。
-4. 确认列表里出现 **Price Finder**，版本 **0.4.0** 以上。
+2. Open `chrome://extensions` in Chrome and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose `~/price-finder-extension` (or the project's `extension` folder).
+4. Check that **Price Finder** appears in the list, version **0.4.0** or later.
 
-### 4. 在这个 Chrome 里登录四家商店
+### 4. Sign in to the four stores in that Chrome
 
-在装了扩展的 Chrome 里分别登录 Walmart、Target、Amazon、Costco，并选好你的门店、会员店或送货地址。**价格会按这些设置显示**。
+In the Chrome that has the extension, sign in to Walmart, Target, Amazon and Costco, and set your store, membership warehouse or delivery address. **Prices are shown according to these settings.**
 
-### 5. 启动并比价
+### 5. Start it and compare
 
 ```bash
 npm run dev -- --port 3001
 ```
 
-用**同一个 Chrome** 打开 http://localhost:3001，输入商品名或条码，点「比价」。
+Open http://localhost:3001 in **the same Chrome**, enter a product name or barcode, and press Compare.
 
-- 旁边会出现几个后台标签页，读完自动关闭。
-- 出结果后，点上面任意一家店的卡片，就只看这家的报价；再点一次或点「显示全部」恢复。
-- 某家弹出验证时，那个标签页会切到前面，按住验证即可继续。
+- A few background tabs appear next to the page and close on their own when done.
+- Once results are in, tap any store card at the top to show only that store's offers; tap it again or press "All stores" to go back.
+- If a store shows a bot check, its tab comes to the front; press and hold to continue.
 
 ---
 
-## 常见问题
+## Troubleshooting
 
-| 现象 | 原因和处理 |
+| Symptom | Cause and fix |
 |---|---|
-| 「比价」按钮是灰的，提示没检测到扩展 | 扩展没装或没启用；装好后**刷新**比价页面 |
-| 提示扩展版本太旧 | 到 `chrome://extensions` 点 Price Finder 的 ↻；如果项目在 iCloud 同步的文件夹里，先重新复制到 `~/price-finder-extension` |
-| 一直显示"准备中"，20 秒后提示扩展没回应 | 同上，重新加载扩展再刷新页面 |
-| 在**全屏模式**下点比价，整个 Chrome 关掉了 | 早期版本会新建窗口，全屏下可能关闭整个 Chrome。0.2.1 起改用后台标签页，如果仍出现请先退出全屏 |
-| 某家一直弹验证 | 短时间内访问太多。等一段时间再用；不要频繁连续比价 |
-| 某家显示 0 个结果 | 网站可能改版。每家最近一次的网页保存在 `.cache/pages/`，可以对照修改 `lib/parse.ts` |
+| The Compare button is grey and says no extension was detected | The extension is not installed or not enabled; after installing it, **reload** the Price Finder page |
+| It says the extension is too old | In `chrome://extensions`, press ↻ on Price Finder; if the project is in an iCloud-synced folder, copy it to `~/price-finder-extension` again first |
+| It stays on "Starting" and after 20 s says the extension did not respond | Same as above: reload the extension, then reload the page |
+| Pressing Compare in **full-screen mode** closed all of Chrome | Early versions opened a new window, which could close Chrome in full screen. Since 0.2.1 it uses background tabs; if it still happens, leave full screen first |
+| One store keeps showing a bot check | Too many visits in a short time. Wait a while and avoid running many comparisons back to back |
+| One store shows 0 results | The site may have changed its layout. The last page per store is saved in `.cache/pages/`; update `lib/parse.ts` against it |
 
 ---
 
-## 限制
+## Limits
 
-- 价格来自各店**搜索结果页**，结账价可能因运费、会员、门店、优惠不同。
-- Target 同一商品有多个规格时，卡片上是价格区间，需要点开确认。
-- 用条码搜索时：Walmart 需要 14 位 GTIN（程序会自动补 0）；Amazon 的主商品常挂在别的编号下，用商品名搜可能找到更多。
-- 这是给个人使用的低频工具。各商店的服务条款一般不允许自动抓取，请不要改成高频、批量或给他人提供的服务。
+- Prices come from each store's **search results page**; the checkout price can differ because of shipping, membership, store or promotions.
+- When a Target product has several sizes, its card shows a price range; open the product page to confirm.
+- Barcode searches: Walmart needs a 14-digit GTIN (zeros are added automatically); Amazon often lists the main product under a different identifier, so a name search may find more.
+- This is a low-volume tool for personal use. Store terms of service generally do not allow automated collection, so do not turn it into a high-volume, bulk, or third-party service.
 
-## 商标说明
+## Trademarks
 
-Walmart、Target、Amazon、Costco 的名称和 logo 属于各自的公司，这里只用来标识是哪家商店。Walmart、Target、Amazon 的图标数据来自 [Simple Icons](https://simpleicons.org/)（CC0）；`public/costco-logo.png` 是 costco.com 上使用的 logo 图片。
-
----
-
-## English summary
-
-Price Finder compares one product across Walmart, Target, Amazon and Costco and ranks matching
-offers by unit price.
-
-**It runs in your own Chrome, not a random or automated browser.** A small extension
-(`extension/`) opens each store's search page as a background tab in the Chrome you already use,
-with your own sign-ins, warehouse, store and delivery address, then returns the page HTML to the
-local Next.js server and closes the tab. Nothing launches a separate automated browser, rotates
-IPs, or works around bot checks: if a store asks for a "press & hold", the tab comes forward and
-the lookup waits up to five minutes for you. Automated and fresh-profile browsers were tried
-first and were blocked; the signed-in everyday browser is what makes it work.
-
-Pacing is per site: one search page per store per comparison, at least 20 s between two loads of
-the same site and at most 12 an hour; results are cached for 24 h. The server parses the pages
-(`lib/parse.ts`), TypeSafe judges each result with five narrow checks (names a brand, same brand,
-same product line, compatible variant, same form; size is ignored because ranking is per unit),
-and verdicts are cached per query and title so answers are stable. Setup: `npm install`, put
-`TYPESAFE_API_KEY` in `.env.local` (gitignored), load the unpacked extension in Chrome, sign in to
-the four stores in that Chrome, run `npm run dev -- --port 3001`, open http://localhost:3001 in
-the same Chrome.
+The Walmart, Target, Amazon and Costco names and logos belong to their respective companies and are used here only to identify each store. The Walmart, Target and Amazon icon data comes from [Simple Icons](https://simpleicons.org/) (CC0); `public/costco-logo.png` is the logo image used on costco.com.
