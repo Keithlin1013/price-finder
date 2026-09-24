@@ -82,15 +82,23 @@ Parsing, URLs and pacing all live in the server and the page, so **changing them
 
 ### How a match is decided
 
-For every result, TypeSafe answers five yes/no questions:
+For every result, TypeSafe answers six yes/no questions:
 
 1. Does the title name a brand? (If not, question 2 is skipped and the product line decides.)
 2. Is it the same brand as the one you want?
 3. Is it the same product line? (Every qualifier word counts: Platinum and Platinum Plus are different lines.)
 4. Is the scent or flavor compatible? (A title that states no scent counts as compatible.)
-5. Is it the same physical form? (Liquid, powder, gel, pods, and so on.)
+5. Is it the same physical form? (Liquid, powder, gel, pods, and so on; a query that states no form accepts any.)
+6. Is it the same kind of product? (Laundry detergent, hand soap, and so on.)
 
-**All five must pass. Size and pack count are not checked**, because results are ranked per unit. Verdicts are stored per query and product title in `.cache/verdicts/`, so the same listing gets the same answer every time; when the rules change, old verdicts are discarded and results are judged again.
+**In same-product mode all six must pass. Size and pack count are never checked**, because results are ranked per unit. Verdicts are stored per query and product title in `.cache/verdicts/`, so the same listing gets the same answer every time; when the rules change, old verdicts are discarded and results are judged again.
+
+### Two ways to compare: same product / similar too
+
+- **Same product**: all the checks above must pass. For a specific product, such as "Tide Ultra Concentrated Original 170 fl oz".
+- **Similar too**: only the **kind of product** must match (both laundry detergent, both hand soap); the brand or scent is required only when your query names one. For broad searches such as "Tide laundry detergent" or "hand soap refill".
+
+TypeSafe first decides whether your query names one specific product or a kind of product and picks the mode (a barcode is always same-product). A "Same product / Similar too" switch sits next to the results heading; switching recombines verdicts for the results already read and never loads the stores again.
 
 ### How unit prices are computed
 

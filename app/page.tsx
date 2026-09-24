@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Judged } from "@/lib/match";
+import type { Judged, Scope } from "@/lib/match";
 import { type Offer, PACING, searchUrl, type Store } from "@/lib/stores";
 import type { Unit, UnitPrice } from "@/lib/units";
 import { IMAGE_LOGOS, LOGOS } from "@/lib/logos";
@@ -171,6 +171,7 @@ function Sign({ o, unit, rank, lead, filtered }: { o: Ranked; unit: Unit | null;
 
 // The stamp names the first check the offer failed.
 const MISMATCH: Record<string, { zh: string; en: string }> = {
+  kind: { zh: "不同品类", en: "OTHER KIND" },
   brand: { zh: "不同品牌", en: "OTHER BRAND" },
   line: { zh: "不同系列", en: "OTHER LINE" },
   form: { zh: "不同形态", en: "OTHER FORM" },
@@ -180,7 +181,10 @@ const MISMATCH: Record<string, { zh: string; en: string }> = {
 function Stamped({ o, unit }: { o: Ranked; unit: Unit | null }) {
   const u = rankUnit(o, unit);
   const f = u ? unitFigure(u) : null;
-  const why = (o.mismatch && MISMATCH[o.mismatch]) || { zh: "不同款", en: "NOT A MATCH" };
+  const why =
+    o.price === null && !o.mismatch
+      ? { zh: "暂无价格", en: "NO PRICE" }
+      : (o.mismatch && MISMATCH[o.mismatch]) || { zh: "不同款", en: "NOT A MATCH" };
   return (
     <article className="sign sign-void">
       <span className="stamp" aria-label={`${why.zh} ${why.en}`}>
@@ -231,6 +235,9 @@ export default function Home() {
   const [stores, setStores] = useState<Record<Store, StoreStatus> | null>(null);
   const [offers, setOffers] = useState<Ranked[] | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
+  // exact: same product only; similar: same kind of product. Chosen from the query, switchable.
+  const [scope, setScope] = useState<Scope | null>(null);
+  const [rejudging, setRejudging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -242,20 +249,29 @@ export default function Home() {
   // Cleared by the first message of a run; if nothing arrives the extension is not answering.
   const silence = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function finish() {
+  async function finish(requested: Scope | "auto" = "auto") {
     const r = run.current;
     if (!r) return;
     const all = STORES.flatMap((s) => r.offers[s] ?? []);
     const res = await fetch("/api/judge", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ q: r.q, offers: all }),
+      body: JSON.stringify({ q: r.q, offers: all, scope: requested }),
     });
     const data = await res.json();
     if (!res.ok) setError(`TypeSafe 判断失败：${data.error}`);
     setOffers(data.offers ?? []);
     setUnit(data.unit ?? null);
+    setScope(data.scope ?? null);
     setBusy(false);
+  }
+
+  // Switching scope re-combines verdicts already stored for these results; no store is loaded again.
+  async function switchScope(next: Scope) {
+    setRejudging(true);
+    setOnly(null);
+    await finish(next);
+    setRejudging(false);
   }
 
   useEffect(() => {
@@ -312,6 +328,7 @@ export default function Home() {
     setError("");
     setOffers(null);
     setOnly(null);
+    setScope(null);
     setBusy(true);
     // Stores with results from the last 24 h are not loaded again.
     const cached: Record<Store, Offer[] | null> = await fetch(`/api/offers?q=${encodeURIComponent(q)}`).then((r) => r.json());
@@ -418,7 +435,11 @@ export default function Home() {
                     <StoreMark store={s} />
                   </span>
                   <span className="upright-line">
-                    <span className="zh">{filterable && stores[s].state === "done" ? `${matchCount(s)} 个同款，共 ${line.zh}` : line.zh}</span>
+                    <span className="zh">
+                      {filterable && stores[s].state === "done"
+                        ? `${matchCount(s)} 个${scope === "similar" ? "相似" : "同款"}，共 ${line.zh}`
+                        : line.zh}
+                    </span>
                     <span className="en">{filterable ? (only === s ? "SHOWING ONLY THIS STORE" : "TAP TO SHOW ONLY") : line.en}</span>
                   </span>
                 </>
@@ -468,18 +489,48 @@ export default function Home() {
               <h2 className="rack-title">
                 <span className="zh">
                   {only ? `${STORE_NAMES[only]}：` : ""}
-                  {same.length ? `${same.length} 个同款报价` : only ? "这家没有同款" : "没有找到同款"}
+                  {same.length
+                    ? `${same.length} 个${scope === "similar" ? "相似商品" : "同款"}报价`
+                    : only
+                    ? `这家没有${scope === "similar" ? "相似商品" : "同款"}`
+                    : `没有找到${scope === "similar" ? "相似商品" : "同款"}`}
                 </span>
                 <span className="en">
                   {same.length ? `SORTED ${unit ? `PER ${unit.toUpperCase()}` : "PER UNIT"}` : only ? "TRY ANOTHER STORE" : "TRY THE FULL NAME OR THE BARCODE"}
                 </span>
               </h2>
-              {only && (
-                <button type="button" className="show-all" onClick={() => setOnly(null)}>
-                  <span className="zh">显示全部</span>
-                  <span className="en">ALL STORES</span>
-                </button>
-              )}
+              <div className="rack-actions">
+                {only && (
+                  <button type="button" className="show-all" onClick={() => setOnly(null)}>
+                    <span className="zh">显示全部</span>
+                    <span className="en">ALL STORES</span>
+                  </button>
+                )}
+                {scope && (
+                  <div className="scope" role="group" aria-label="比法 Match scope">
+                    <button
+                      type="button"
+                      className="scope-option"
+                      aria-pressed={scope === "exact"}
+                      disabled={rejudging}
+                      onClick={() => scope !== "exact" && switchScope("exact")}
+                    >
+                      <span className="zh">只看同款</span>
+                      <span className="en">SAME PRODUCT</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="scope-option"
+                      aria-pressed={scope === "similar"}
+                      disabled={rejudging}
+                      onClick={() => scope !== "similar" && switchScope("similar")}
+                    >
+                      <span className="zh">包括相似</span>
+                      <span className="en">SIMILAR TOO</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {same[0] && <Sign key={`lead-${only ?? "all"}`} o={same[0]} unit={unit} rank={0} lead filtered={!!only} />}
@@ -495,8 +546,8 @@ export default function Home() {
             {others.length > 0 && (
               <details className="voids">
                 <summary>
-                  <span className="zh">{others.length} 个不同款</span>
-                  <span className="en">NOT THE SAME PRODUCT</span>
+                  <span className="zh">{others.length} 个{scope === "similar" ? "不相关" : "不同款"}或暂无价格</span>
+                  <span className="en">NOT THE SAME PRODUCT OR NO PRICE</span>
                 </summary>
                 <div className="rack-row">
                   {others.map((o, i) => (
