@@ -17,6 +17,8 @@ export function isBarcode(q: string) {
 
 // "Pack of 6", "(6 pack)", "6-Pack", "6/Carton". Not "16ct": that counts slices or pieces in one package.
 export function packCount(text: string): number {
+  if (/\b(?:twin|double)[\s-]?pack\b/i.test(text)) return 2;
+  if (/\b(?:triple|3x)[\s-]?pack\b/i.test(text)) return 3;
   const m =
     /pack of (\d+)/i.exec(text) ??
     /\b(\d+)[\s-]?(?:pack|pk)\b/i.exec(text) ??

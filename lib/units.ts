@@ -4,14 +4,14 @@ export type Unit = "fl oz" | "oz" | "lb" | "load" | "count";
 export type UnitPrice = { unit: Unit; price: number };
 
 const PATTERNS: [RegExp, Unit, number][] = [
-  [/(\d+(?:\.\d+)?)\s*(?:fl\.?\s*oz|fluid\s*ounces?)\b/i, "fl oz", 1],
+  [/(\d+(?:\.\d+)?)[\s-]*(?:fl\.?\s*oz|fluid\s*ounces?)\b/i, "fl oz", 1],
   [/(\d+(?:\.\d+)?)\s*(?:ml|milliliters?)\b/i, "fl oz", 1 / 29.5735],
   [/(\d+(?:\.\d+)?)\s*(?:l|liters?|litres?)\b/i, "fl oz", 33.814],
   [/(\d+(?:\.\d+)?)\s*(?:gal|gallons?)\b/i, "fl oz", 128],
   [/(\d+(?:\.\d+)?)\s*(?:loads?)\b/i, "load", 1],
-  [/(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i, "lb", 1],
+  [/(\d+(?:\.\d+)?)[\s-]*(?:lbs?|pounds?)\b/i, "lb", 1],
   // Weight ounces; "fl oz" is matched first and removed so it is not read twice.
-  [/(\d+(?:\.\d+)?)\s*(?:oz|ounces?)\b/i, "oz", 1],
+  [/(\d+(?:\.\d+)?)[\s-]*(?:oz|ounces?)\b/i, "oz", 1],
   [/(\d+)\s*(?:ct|count|pods|sheets|rolls|slices|pieces|pcs)\b/i, "count", 1],
 ];
 
@@ -26,6 +26,14 @@ export function sizes(title: string): Partial<Record<Unit, number>> {
     text = text.replace(m[0], " ");
   }
   return out;
+}
+
+// Stores often write a liquid's size as plain "oz". When the offers are ranked per fl oz, an offer that
+// only states oz is read as fl oz so it can be ranked with the rest.
+export function asFluid(prices: UnitPrice[]): UnitPrice[] {
+  if (prices.some((u) => u.unit === "fl oz")) return prices;
+  const oz = prices.find((u) => u.unit === "oz");
+  return oz ? [{ unit: "fl oz", price: oz.price }, ...prices] : prices;
 }
 
 // Price per unit for every size the title states, across all packages in a multipack.
